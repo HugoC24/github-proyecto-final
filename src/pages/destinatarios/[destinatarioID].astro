@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import { Markdown } from 'astro/components'
+import Airtable from 'airtable';
+export async function getStaticPaths() {
+  let apiKey = import.meta.env.AIRTABLE_API_KEY;  
+  let dbID = import.meta.env.AIRTABLE_DB_ID;
+  
+  let airtable = new Airtable({apiKey}).base(dbID);
+  let elements = await airtable('destinatario').select({
+    view: 'Grid view'
+  }).firstPage();
+  return await Promise.all(elements.map(async (record) => {
+    let destinatarioObject : any = {
+      params: { destinatarioID: record.id },
+      props: {        
+        ...record.fields
+      }
+    };
+    if(record.fields.activity instanceof Array) {
+      let activityItems = await Promise.all(
+        record.fields.activity.map(async(activityItem) => {
+          return airtable('activity').find(activityItem);
+        })
+      );
+      destinatarioObject.props['activities'] = activityItems.map(activity => ({
+        params: { id: activity.id },
+        props: {
+          ...activity.fields
+        }
+      }))
+      delete destinatarioObject.props['activity'];
+    }
+    return destinatarioObject;
+  }));
+}
+// const {aid} = Astro.request.params;
+const destinatarioItem = Astro.props;
+---
+
+<BaseLayout title="Homepage">
+<h1>actividades extraescolares de {destinatarioItem.Name}</h1>
+<div class="list-of-activities">
+
+  {destinatarioItem.activities && destinatarioItem.activities.map((item) => (
+    <div class="activity-preview">
+      <a href={`/activities/${item.params.id}`}>
+        <div class="activity-picture">
+        <img src={item.props.Attachments[0].thumbnails.large.url} />
+        </div>
+      </a>
+      <div class="title">
+        {item.props.Name}
+      </div>
+    </div>
+  ))}
+</div>
+</BaseLayout>
